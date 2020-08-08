@@ -1,0 +1,91 @@
+from random import shuffle
+from objects.player import Player
+from objects.u_card import deck_of_cards, Action
+from objects.game_logger import game_logger
+import copy
+import time
+
+gLog = game_logger()
+
+
+def reverse_items_at_index(items, index):
+    return list(reversed(items[:index-1])) + list(reversed(items[index-1:]))
+
+
+class Game:
+
+    def __init__(self):
+        self.init_cards = 7
+        self.limit_players = 10
+        self.deck_cards = deck_of_cards()
+        shuffle(self.deck_cards)
+        self.players = None
+        self.team_up()
+        self.distribute_cards()
+        self.open_card = self.deck_cards.popleft()
+        gLog.info("Game Starts")
+        gLog.info("Number of cards in deck: {}".format(self.deck_cards.__len__()))
+        self.winner = False
+        self.initiate()
+        # get deck of cards
+
+    def team_up(self):
+        # get players
+        num_of_players = int(input("team of? : "))
+        self.players = []
+        for player in range(num_of_players):
+            name = input("enter play {} name : ".format(player + 1))
+            self.players.append(Player(name))
+        gLog.info("lets play game of {}".format(num_of_players))
+
+    def distribute_cards(self):
+        # distribute cards among players
+        for x in range(self.init_cards):
+            for player in self.players:
+                card = self.deck_cards.popleft()
+                player.my_cards.append(card)
+
+    def initiate(self):
+        play_ref = self.open_card
+        players_pool = copy.deepcopy(self.players)
+        while not self.winner:
+            for index, uno_player in enumerate(players_pool):
+                gLog.info("Open Card: %s", play_ref.__str__)
+                gLog.info("%s's TURN", uno_player.name)
+                gLog.info(uno_player.display_my_cards())
+                if play_ref.action == Action.SKIP_TURN:
+                    gLog.info("SKIPPED %s's TURN", uno_player.name)
+                    play_ref.action = Action.PLAY_NORMS
+                    continue
+                elif play_ref.action == Action.DRAW_TWO:
+                    self.draw_cards(uno_player, 2)
+                    play_ref.action = Action.PLAY_NORMS
+                    continue
+                elif play_ref.action == Action.DRAW_FOUR_COLOR_CHANGE:
+                    self.draw_cards(uno_player, 4)
+                    play_ref.action = Action.PLAY_NORMS
+                    continue
+                elif play_ref.action == Action.PLAY_NORMS:
+                    if uno_player.has_playable_card(play_ref):
+                        play_ref = uno_player.play(play_ref)
+                    else:
+                        self.draw_cards(uno_player, 1)
+
+                print("{} played {}".format(uno_player.name, play_ref.__str__))
+                if play_ref.action == Action.REVERSE_ORDER:
+                    gLog.info("%s REVERSED ORDER", uno_player.name)
+                    players_pool = reverse_items_at_index(players_pool, index)
+                    play_ref.action = Action.PLAY_NORMS
+                    break
+                gLog.info("+"*30)
+                time.sleep(2)
+
+    def draw_cards(self, draw_player, number_of_cards):
+        gLog.info("Uh!, I am drawing {} cards".format(number_of_cards))
+        for _ in range(number_of_cards):
+            new_card = self.deck_cards.popleft()
+            draw_player.my_cards.append(new_card)
+
+
+if __name__ == "__main__":
+    Game()
