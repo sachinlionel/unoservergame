@@ -7,10 +7,14 @@ ps.connect((socket.gethostname(), port))
 
 while True:
     msg = ps.recv(512).decode()
-    print(msg)
-    if msg == 'name:':
-        player_name = input("enter your name: ")
-        ps.send(player_name.encode())
-    elif msg == 'card index:':
-        player_name = input("enter your the card index: ")
-        ps.send(player_name.encode())
+    if msg == 'enter your name: ':
+        ip = input("enter your name: ")
+        ps.send(ip.encode())
+    elif msg == 'play a card by index: ':
+        ip = input(msg)
+        ps.send(ip.encode())
+    elif msg == "please chose a color: ":
+        ip = input(msg)
+        ps.send(ip.encode())
+    else:
+        print(f"{msg}")

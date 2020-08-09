@@ -1,7 +1,6 @@
 from random import shuffle
-from objects.u_card import deck_of_cards, Action
+from objects.u_card import deck_of_cards, Action, CardFamily
 from objects.game_logger import game_logger
-import copy
 from config import port
 import time
 import socket
@@ -12,6 +11,7 @@ gLog = game_logger()
 
 def reverse_items_at_index(items, index):
     return list(reversed(items[:index-1])) + list(reversed(items[index-1:]))
+
 
 def send_data(player, data, expect_reply=False):
     time.sleep(0.5)
@@ -40,6 +40,8 @@ def can_play(selected_card, ref_card):
         playable = True
     elif selected_card.figure == ref_card.figure:
         playable = True
+    elif selected_card.family == CardFamily.WILD_POWER:
+        playable = True
     return playable
 
 
@@ -53,30 +55,36 @@ class Player:
 
     @play_right_card
     def play_card(self, ref_card):
-        card_index = int(send_data(self.socket, "card index:", expect_reply=True))
+        card_index = int(send_data(self.socket, "play a card by index: ", expect_reply=True))
         python_index = card_index - 1
         if python_index < len(self.my_cards):
             card = self.my_cards[python_index]
             if can_play(card, ref_card):
                 self.my_cards.remove(card)
+                if card.action in [Action.COLOR_CHANGE, Action.DRAW_FOUR_COLOR_CHANGE]:
+                    change_color = send_data(self.socket, "please chose a color: ", expect_reply=True)
+                    card.color = change_color
                 return card
 
     def display_my_cards(self):
-        for _ in self.my_cards:
-            gLog.info(_.__str__)
+        # for _ in self.my_cards:
+            # gLog.info(_.__str__)
         return [_.__str__ for _ in self.my_cards]
 
     def has_playable_card(self, ref_card):
         playable_card = False
         available_colors = [_.color for _ in self.my_cards]
         available_figures = [_.figure for _ in self.my_cards]
+        available_family = [_.family for _ in self.my_cards]
         gLog.info("ref card: {}".format(ref_card.__str__))
-        gLog.info("I am {}, i have {} and {}".format(self.name, available_colors, available_figures))
+        gLog.info(f"I am {self.name}, i have {self.display_my_cards()}")
         if not available_colors and  not available_figures:
             print("I won")
         if ref_card.color in available_colors:
             playable_card = True
         elif ref_card.figure in available_figures:
+            playable_card = True
+        elif CardFamily.WILD_POWER in available_family:
             playable_card = True
         if playable_card:
             gLog.info("I have playable card")
@@ -120,7 +128,7 @@ class GameServer:
             # accept incoming connection
             player_socket, addr = self.s.accept()
             send_data(player_socket, f"you are connected to game server, your ip address {addr}")
-            name = send_data(player_socket, "name:", expect_reply=True)
+            name = send_data(player_socket, "enter your name: ", expect_reply=True)
             self.players.append(game_player(player_socket, Player(name, player_socket)))
             gLog.info(f"Player {name} is ready to play")
             if len(self.players) >= 2:
@@ -145,18 +153,25 @@ class GameServer:
                 gLog.info("Open Card: %s", play_ref.__str__)
                 gLog.info("%s's TURN", uno_player.name)
                 player_cards = uno_player.display_my_cards()
+                # skip ones turn
                 if play_ref.action == Action.SKIP_TURN:
                     gLog.info("SKIPPED %s's TURN", uno_player.name)
                     play_ref.action = Action.PLAY_NORMS
                     continue
+                # skip ones turn and add two cards to him
                 elif play_ref.action == Action.DRAW_TWO:
                     self.draw_cards(uno_player, 2)
                     play_ref.action = Action.PLAY_NORMS
                     continue
+                # color change
+                elif play_ref.action == Action.COLOR_CHANGE:
+                    play_ref.action = Action.PLAY_NORMS
+                # skip ones turn and add four cards to him
                 elif play_ref.action == Action.DRAW_FOUR_COLOR_CHANGE:
                     self.draw_cards(uno_player, 4)
                     play_ref.action = Action.PLAY_NORMS
                     continue
+                # play in circle
                 elif play_ref.action == Action.PLAY_NORMS:
                     if uno_player.has_playable_card(play_ref):
                         send_data(uno_player_socket, f"Your cards: {str(player_cards)}")
@@ -165,7 +180,7 @@ class GameServer:
                         play_ref = uno_player.play_card(play_ref)
                     else:
                         self.draw_cards(uno_player, 1)
-
+                # play in reverse
                 print("{} played {}".format(uno_player.name, play_ref.__str__))
                 if play_ref.action == Action.REVERSE_ORDER:
                     gLog.info("%s REVERSED ORDER", uno_player.name)
